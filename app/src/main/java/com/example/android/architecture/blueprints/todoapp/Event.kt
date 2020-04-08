@@ -15,6 +15,9 @@
  */
 package com.example.android.architecture.blueprints.todoapp
 
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 
 /**
@@ -56,4 +59,10 @@ class EventObserver<T>(private val onEventUnhandledContent: (T) -> Unit) : Obser
             onEventUnhandledContent(it)
         }
     }
+}
+
+fun <E> Fragment.handleEvent(liveData: LiveData<Event<E>>, action: (E) -> Unit) {
+    liveData.observe(viewLifecycleOwner, EventObserver {
+        action.invoke(it)
+    })
 }

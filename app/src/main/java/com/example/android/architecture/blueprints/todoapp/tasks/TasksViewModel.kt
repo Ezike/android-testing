@@ -15,7 +15,6 @@
  */
 package com.example.android.architecture.blueprints.todoapp.tasks
 
-import android.app.Application
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.*
@@ -24,20 +23,17 @@ import com.example.android.architecture.blueprints.todoapp.R
 import com.example.android.architecture.blueprints.todoapp.data.Result
 import com.example.android.architecture.blueprints.todoapp.data.Result.Success
 import com.example.android.architecture.blueprints.todoapp.data.Task
-import com.example.android.architecture.blueprints.todoapp.data.source.DefaultTasksRepository
 import com.example.android.architecture.blueprints.todoapp.data.source.TasksDataSource
+import com.example.android.architecture.blueprints.todoapp.data.source.TasksRepository
+import com.example.android.architecture.blueprints.todoapp.taskdetail.TaskDetailViewModel
 import kotlinx.coroutines.launch
 
 /**
  * ViewModel for the task list screen.
  */
-class TasksViewModel(application: Application) : AndroidViewModel(application) {
+class TasksViewModel(private val tasksRepository: TasksRepository) : ViewModel() {
 
-    // Note, for testing and architecture purposes, it's bad practice to construct the repository
-    // here. We'll show you how to fix this during the codelab
-    private val tasksRepository = DefaultTasksRepository.getRepository(application)
-
-    private val _forceUpdate = MutableLiveData<Boolean>(false)
+    private val _forceUpdate = MutableLiveData(false)
 
     private val _items: LiveData<List<Task>> = _forceUpdate.switchMap { forceUpdate ->
         if (forceUpdate) {
@@ -109,20 +105,20 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         when (requestType) {
             TasksFilterType.ALL_TASKS -> {
                 setFilter(
-                    R.string.label_all, R.string.no_tasks_all,
-                    R.drawable.logo_no_fill, true
+                        R.string.label_all, R.string.no_tasks_all,
+                        R.drawable.logo_no_fill, true
                 )
             }
             TasksFilterType.ACTIVE_TASKS -> {
                 setFilter(
-                    R.string.label_active, R.string.no_tasks_active,
-                    R.drawable.ic_check_circle_96dp, false
+                        R.string.label_active, R.string.no_tasks_active,
+                        R.drawable.ic_check_circle_96dp, false
                 )
             }
             TasksFilterType.COMPLETED_TASKS -> {
                 setFilter(
-                    R.string.label_completed, R.string.no_tasks_completed,
-                    R.drawable.ic_verified_user_96dp, false
+                        R.string.label_completed, R.string.no_tasks_completed,
+                        R.drawable.ic_verified_user_96dp, false
                 )
             }
         }
@@ -131,8 +127,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun setFilter(
-        @StringRes filteringLabelString: Int, @StringRes noTasksLabelString: Int,
-        @DrawableRes noTaskIconDrawable: Int, tasksAddVisible: Boolean
+            @StringRes filteringLabelString: Int, @StringRes noTasksLabelString: Int,
+            @DrawableRes noTaskIconDrawable: Int, tasksAddVisible: Boolean
     ) {
         _currentFilteringLabel.value = filteringLabelString
         _noTasksLabel.value = noTasksLabelString
@@ -211,23 +207,37 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun filterItems(tasks: List<Task>, filteringType: TasksFilterType): List<Task> {
-            val tasksToShow = ArrayList<Task>()
-            // We filter the tasks based on the requestType
-            for (task in tasks) {
-                when (filteringType) {
-                    TasksFilterType.ALL_TASKS -> tasksToShow.add(task)
-                    TasksFilterType.ACTIVE_TASKS -> if (task.isActive) {
-                        tasksToShow.add(task)
-                    }
-                    TasksFilterType.COMPLETED_TASKS -> if (task.isCompleted) {
-                        tasksToShow.add(task)
-                    }
+        val tasksToShow = ArrayList<Task>()
+        // We filter the tasks based on the requestType
+        for (task in tasks) {
+            when (filteringType) {
+                TasksFilterType.ALL_TASKS -> tasksToShow.add(task)
+                TasksFilterType.ACTIVE_TASKS -> if (task.isActive) {
+                    tasksToShow.add(task)
+                }
+                TasksFilterType.COMPLETED_TASKS -> if (task.isCompleted) {
+                    tasksToShow.add(task)
                 }
             }
-            return tasksToShow
         }
+        return tasksToShow
+    }
 
     fun refresh() {
         _forceUpdate.value = true
     }
+
+
+
+    @Suppress("UNCHECKED_CAST")
+    class Factory(
+            private val tasksRepository: TasksRepository
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+            return (TaskDetailViewModel(tasksRepository) as T)
+        }
+
+    }
 }
+
+
