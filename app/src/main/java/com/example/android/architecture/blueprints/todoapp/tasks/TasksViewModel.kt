@@ -25,7 +25,6 @@ import com.example.android.architecture.blueprints.todoapp.data.Result.Success
 import com.example.android.architecture.blueprints.todoapp.data.Task
 import com.example.android.architecture.blueprints.todoapp.data.source.TasksDataSource
 import com.example.android.architecture.blueprints.todoapp.data.source.TasksRepository
-import com.example.android.architecture.blueprints.todoapp.taskdetail.TaskDetailViewModel
 import kotlinx.coroutines.launch
 
 /**
@@ -43,7 +42,9 @@ class TasksViewModel(private val tasksRepository: TasksRepository) : ViewModel()
                 _dataLoading.value = false
             }
         }
-        tasksRepository.observeTasks().switchMap { filterTasks(it) }
+        tasksRepository.observeTasks().switchMap {
+            filterTasks(it)
+        }
 
     }
 
@@ -181,22 +182,18 @@ class TasksViewModel(private val tasksRepository: TasksRepository) : ViewModel()
         _snackbarText.value = Event(message)
     }
 
-    private fun filterTasks(tasksResult: Result<List<Task>>): LiveData<List<Task>> {
+    fun filterTasks(tasksResult: Result<List<Task>>): LiveData<List<Task>> {
         // TODO: This is a good case for liveData builder. Replace when stable.
-        val result = MutableLiveData<List<Task>>()
-
-        if (tasksResult is Success) {
-            isDataLoadingError.value = false
-            viewModelScope.launch {
-                result.value = filterItems(tasksResult.data, currentFiltering)
+        return liveData {
+            if (tasksResult is Success) {
+                isDataLoadingError.value = false
+                emit(filterItems(tasksResult.data, currentFiltering))
+            } else {
+                emit(emptyList())
+                showSnackbarMessage(R.string.loading_tasks_error)
+                isDataLoadingError.value = true
             }
-        } else {
-            result.value = emptyList()
-            showSnackbarMessage(R.string.loading_tasks_error)
-            isDataLoadingError.value = true
         }
-
-        return result
     }
 
     /**
@@ -228,13 +225,12 @@ class TasksViewModel(private val tasksRepository: TasksRepository) : ViewModel()
     }
 
 
-
     @Suppress("UNCHECKED_CAST")
     class Factory(
             private val tasksRepository: TasksRepository
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel?> create(modelClass: Class<T>): T {
-            return (TaskDetailViewModel(tasksRepository) as T)
+            return (TasksViewModel(tasksRepository) as T)
         }
 
     }

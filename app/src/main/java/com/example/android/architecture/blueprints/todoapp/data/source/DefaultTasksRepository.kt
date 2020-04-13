@@ -15,51 +15,33 @@
  */
 package com.example.android.architecture.blueprints.todoapp.data.source
 
-import android.app.Application
 import androidx.lifecycle.LiveData
-import androidx.room.Room
 import com.example.android.architecture.blueprints.todoapp.data.Result
 import com.example.android.architecture.blueprints.todoapp.data.Result.Success
 import com.example.android.architecture.blueprints.todoapp.data.Task
-import com.example.android.architecture.blueprints.todoapp.data.source.local.TasksLocalDataSource
-import com.example.android.architecture.blueprints.todoapp.data.source.local.ToDoDatabase
-import com.example.android.architecture.blueprints.todoapp.data.source.remote.TasksRemoteDataSource
+import com.example.android.architecture.blueprints.todoapp.wrapEspressoIdlingResource
 import kotlinx.coroutines.*
 
 /**
  * Concrete implementation to load tasks from the data sources into a cache.
  */
-class DefaultTasksRepository(private val tasksRemoteDataSource: TasksDataSource,
-                             private val tasksLocalDataSource: TasksDataSource,
-                             private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO) : TasksRepository {
+class DefaultTasksRepository(
+        private val tasksRemoteDataSource: TasksDataSource,
+        private val tasksLocalDataSource: TasksDataSource,
+        private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO) : TasksRepository {
 
-
-    companion object {
-        @Volatile
-        private var INSTANCE: DefaultTasksRepository? = null
-
-        fun getRepository(app: Application): DefaultTasksRepository {
-            return INSTANCE ?: synchronized(this) {
-                val database = Room.databaseBuilder(app,
-                                ToDoDatabase::class.java, "Tasks.db")
-                        .build()
-                DefaultTasksRepository(TasksRemoteDataSource, TasksLocalDataSource(database.taskDao()))
-                        .also {
-                            INSTANCE = it
-                        }
-            }
-        }
-    }
 
     override suspend fun getTasks(forceUpdate: Boolean): Result<List<Task>> {
-        if (forceUpdate) {
-            try {
-                updateTasksFromRemoteDataSource()
-            } catch (ex: Exception) {
-                return Result.Error(ex)
+        wrapEspressoIdlingResource {
+            if (forceUpdate) {
+                try {
+                    updateTasksFromRemoteDataSource()
+                } catch (ex: Exception) {
+                    return Result.Error(ex)
+                }
             }
+            return tasksLocalDataSource.getTasks()
         }
-        return tasksLocalDataSource.getTasks()
     }
 
     override suspend fun refreshTasks() {
@@ -67,29 +49,38 @@ class DefaultTasksRepository(private val tasksRemoteDataSource: TasksDataSource,
     }
 
     override fun observeTasks(): LiveData<Result<List<Task>>> {
-        return tasksLocalDataSource.observeTasks()
+        wrapEspressoIdlingResource {
+            return tasksLocalDataSource.observeTasks()
+        }
     }
 
     override suspend fun refreshTask(taskId: String) {
-        updateTaskFromRemoteDataSource(taskId)
+        wrapEspressoIdlingResource {
+            updateTaskFromRemoteDataSource(taskId)
+        }
     }
 
     private suspend fun updateTasksFromRemoteDataSource() {
-        val remoteTasks = tasksRemoteDataSource.getTasks()
+        wrapEspressoIdlingResource {
+            val remoteTasks = tasksRemoteDataSource.getTasks()
 
-        if (remoteTasks is Success) {
-            // Real apps might want to do a proper sync.
-            tasksLocalDataSource.deleteAllTasks()
-            remoteTasks.data.forEach { task ->
-                tasksLocalDataSource.saveTask(task)
+            if (remoteTasks is Success) {
+                // Real apps might want to do a proper sync.
+                tasksLocalDataSource.deleteAllTasks()
+                remoteTasks.data.forEach { task ->
+                    tasksLocalDataSource.saveTask(task)
+                }
+            } else if (remoteTasks is Result.Error) {
+                throw remoteTasks.exception
             }
-        } else if (remoteTasks is Result.Error) {
-            throw remoteTasks.exception
         }
     }
 
     override fun observeTask(taskId: String): LiveData<Result<Task>> {
-        return tasksLocalDataSource.observeTask(taskId)
+        wrapEspressoIdlingResource {
+            return tasksLocalDataSource.observeTask(taskId)
+
+        }
     }
 
     private suspend fun updateTaskFromRemoteDataSource(taskId: String) {
@@ -104,16 +95,20 @@ class DefaultTasksRepository(private val tasksRemoteDataSource: TasksDataSource,
      * Relies on [getTasks] to fetch data and picks the task with the same ID.
      */
     override suspend fun getTask(taskId: String, forceUpdate: Boolean): Result<Task> {
-        if (forceUpdate) {
-            updateTaskFromRemoteDataSource(taskId)
+        wrapEspressoIdlingResource {
+            if (forceUpdate) {
+                updateTaskFromRemoteDataSource(taskId)
+            }
+            return tasksLocalDataSource.getTask(taskId)
         }
-        return tasksLocalDataSource.getTask(taskId)
     }
 
     override suspend fun saveTask(task: Task) {
-        coroutineScope {
-            launch { tasksRemoteDataSource.saveTask(task) }
-            launch { tasksLocalDataSource.saveTask(task) }
+        wrapEspressoIdlingResource {
+            coroutineScope {
+                launch { tasksRemoteDataSource.saveTask(task) }
+                launch { tasksLocalDataSource.saveTask(task) }
+            }
         }
     }
 
@@ -171,6 +166,8 @@ class DefaultTasksRepository(private val tasksRemoteDataSource: TasksDataSource,
     }
 
     private suspend fun getTaskWithId(id: String): Result<Task> {
-        return tasksLocalDataSource.getTask(id)
+        wrapEspressoIdlingResource {
+            return tasksLocalDataSource.getTask(id)
+        }
     }
 }
